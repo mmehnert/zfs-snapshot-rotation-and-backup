@@ -16,7 +16,7 @@ zfs_backup_clean_snapshot() {
 
 zfs_backup_clean_local(){
     for i in `zfs list  -t snapshot -o name |grep $SOURCE@|grep @$PREFIX|head -n -3`;  do
-	zfs_backup_clean_snapshot "$i" "$REMOTE" "$1"
+	zfs_backup_clean_snapshot "$i" "" "$1"
     done
     return 0
 }
