@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+SOURCE=root
+DEST=samsung/zfsbackup
+REMOTE="ssh router"
+PREFIX=backup-storage
+
+. `dirname $0`/zfs-backup-functions.sh
+
+
+zfs_perform_backup
+
+zfs_backup_clean_local
+zfs_backup_clean_destination
+zfs_backup_clean_destination_unrelated -y

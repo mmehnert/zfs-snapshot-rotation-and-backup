@@ -1,0 +1,8 @@
+#!/bin/sh
+cmd="/usr/local/sbin/zfs list -t snapshot -o name,creation,used"
+if [[ $UID -ne 0 ]]; then
+  sudo $cmd 
+else 
+  $cmd
+fi
+
