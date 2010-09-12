@@ -8,10 +8,10 @@ PREFIX=backup-toshiba
 
 . `dirname $0`/zfs-backup-functions.sh
 
-zfs_perform_backup
+zfs_perform_backup -y
 
-zfs_backup_clean_local
-zfs_backup_clean_destination
+zfs_backup_clean_local -y
+zfs_backup_clean_destination -y
 zfs_backup_clean_destination_unrelated -y
 
 

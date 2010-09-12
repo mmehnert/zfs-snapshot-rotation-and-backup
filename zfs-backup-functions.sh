@@ -1,6 +1,6 @@
 zfs_backup_clean_snapshot() {
-    REMOTE=$2
-    cmd="$REMOTE zfs destroy  $1"
+    TMPREMOTE=$2
+    cmd="$TMPREMOTE zfs destroy  $1"
 
     if [ "x$3" != "x-y" ]; then
 	echo $cmd" ? (Enter to confirm, non-empty line to reject)"
@@ -22,6 +22,7 @@ zfs_backup_clean_local(){
 }
 
 zfs_backup_clean_destination(){
+    echo "cleaning destination: $REMOTE"
     for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @$PREFIX|head -n -3`; do
 	zfs_backup_clean_snapshot  "$i" "$REMOTE" "$1"
     done
@@ -35,19 +36,19 @@ zfs_backup_clean_destination_unrelated(){
 	zfs_backup_clean_snapshot "$i" "$REMOTE" "$1"
     done
     #others that we can forget about after some time
-    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @quarterly. |head -n -24`; do
+    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @quarterly. |head -n -5`; do
 	zfs_backup_clean_snapshot "$i" "$REMOTE" "$1"
     done
-    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @hourly. |head -n -24`; do
+    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @hourly. |head -n -5`; do
 	zfs_backup_clean_snapshot "$i" "$REMOTE" "$1"
     done
-    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @daily. |head -n -30`; do
+    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @daily. |head -n -7`; do
 	zfs_backup_clean_snapshot "$i" "$REMOTE" "$1"
     done
-    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @weekly. |head -n -24`; do
+    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @weekly. |head -n -2`; do
 	zfs_backup_clean_snapshot "$i" "$REMOTE" "$1"
     done
-    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @monthly. |head -n -6`; do
+    for i in  `$REMOTE zfs list  -t snapshot -o name |grep $DEST@|grep @monthly. |head -n -2`; do
 	zfs_backup_clean_snapshot "$i" "$REMOTE" "$1"
     done
 
@@ -70,9 +71,18 @@ zfs_perform_backup(){
     echo $snap_now_cmd
     echo $transfer_cmd
 
-    echo "Do you want to continue? (y/N)"
-    answer=`line`
-    if [ "x$answer" == "xy" ]; then
+    if [ "x$1" != "x-y" ]; then
+	echo $cmd" ? (Enter to confirm, non-empty line to reject)"
+	answer=`line`
+	if [ "x$answer" != "x" ]; then
+	    return 1
+	fi
+    fi
+
+
+#    echo "Do you want to continue? (y/N)"
+#    answer=`line`
+#    if [ "x$answer" == "xy" ]; then
 	echo "running $rollback_cmd..."
 	$rollback_cmd
 	echo "running $snap_now_cmd..."
@@ -80,10 +90,11 @@ zfs_perform_backup(){
 	echo "running $transfer_cmd..."
 	echo $transfer_cmd|bash
 
-    else
-        echo "No action taken."
-    fi
-    echo "Complete. Looking for older transfer-snapshots..."
+#    else
+#        echo "No action taken."
+#    fi
+#    echo "Complete. Looking for older transfer-snapshots..."
+	return 0
 }
 
 
