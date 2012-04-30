@@ -56,7 +56,8 @@ if [ -n "$QUIET" ] && [ "x$QUIET" != "x-q"  ] ; then
 fi
 
 # Scrubs are stopped by snapshots so avoid snapshotting mid-scrub.
-if zpool status ${TARGET} | grep "scrub in progress" 1> /dev/null; then
+POOL=`echo "$TARGET"|awk -F "/" '{print $1}'`
+if zpool status ${POOL} | grep "scrub in progress" 1> /dev/null; then
         echo "Cowardly refusing to perform a  snapshot during a scrub."
         echo "Will resume normal operation after scrub completes."
         exit 0
