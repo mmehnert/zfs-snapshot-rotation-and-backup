@@ -19,7 +19,7 @@ def get_zfs_filesystems(remote="", fs=""):
   return fs
 
 def get_zfs_snapshots(remote="", fs=""):
-  ss=subprocess.check_output(remote+" zfs list -o name -t snapshot -H -r "+fs+" |grep "+fs+"@",shell=True).split("\n")
+  ss=subprocess.check_output(remote+" zfs list -o name -t snapshot -H -r "+fs+" |grep ^"+fs+"@",shell=True).split("\n")
   ss=ss[0:-1]
   
   return ss
@@ -35,7 +35,7 @@ def get_last_common_snapshot(remote_src="", remote_dst="", fs_src="", fs_dst="")
 
 def get_last_snapshot(remote="", fs=""):
   ss=subprocess.check_output(
-    remote+" zfs list -o name -t snapshot -H -r "+fs+" |grep "+fs+"@",shell=True).split("\n")[-2]
+    remote+" zfs list -o name -t snapshot -H -r "+fs+" |grep ^"+fs+"@",shell=True).split("\n")[-2]
   return ss
 
 def transfer_zfs_fs(remote_src="", remote_dst="", fs_src="", fs_dst="", dry_run=False, verbose=False):
@@ -126,5 +126,25 @@ def is_scrub_running(fs=""):
   zfs_output=subprocess.check_output("zfs status "+pool)
   return "scrub in process" in zfs_output
   
-def create_snapshot(fs="",prefix=""):
-  pass
+def create_snapshot(remote="", fs="",prefix="", dry_run=False, verbose=False):
+  if len(prefix==0):
+    raise ValueError, "prefix for snapshot must be defined"
+  snapshot_command=remote+" zfs snapshot "+fs+"@"+prefix+"-"+timestamp_string()
+  if verbose or dry_run:
+    print snapshot_command
+  if not dry_run:
+    subprocess.check_call(snapshot_command, shell=True)
+
+def clean_snapshots(remote="", fs="", prefix="", number_to_keep=None, dry_run=False, verbose=False):
+  snapshot_list=get_zfs_snapshots(remote=remote, fs=fs)
+  toremove=[]
+  for snapshot in snapshot_list:
+    if not snapshot.split("@")[1].starts_with(prefix):
+      toremove.append(snapshot)
+  map(snapshot_list.pop, toremove)
+  
+  number_to_remove= len(snapshot_list)-number_to_keep
+  if number_to_remove >0:
+    for snap_to_remove in snapshot_list[:number_to_remove]:
+      pass
+    
