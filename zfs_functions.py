@@ -130,7 +130,7 @@ def create_sync_mark_snapshot(remote_src="", fs_src="", target_name="",dry_run=F
    
 def is_zfs_scrub_running(remote="", fs=""):
   pool=fs.split("/")[0]
-  zfs_output=subprocess.check_output(remote+" zfs status "+pool)
+  zfs_output=subprocess.check_output(remote+" zpool status "+pool, shell=True)
   return "scrub in process" in zfs_output
   
 def create_zfs_snapshot(remote="", fs="",prefix="", dry_run=False, verbose=False):
