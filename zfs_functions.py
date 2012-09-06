@@ -6,12 +6,9 @@ Created on 4 Sep 2012
 
 import subprocess
 import datetime
+import signal
+import time
 
-class ZfsException(Exception):
-  def __init__(self, value):
-    self.parameter = value
-  def __str__(self):
-    return repr(self.parameter)
 
 def get_zfs_filesystems(remote="", fs=""):
   fs=subprocess.check_output(remote+' zfs list -o name -H -r '+fs,shell=True).split("\n")
@@ -19,6 +16,9 @@ def get_zfs_filesystems(remote="", fs=""):
   return fs
 
 def get_zfs_snapshots(remote="", fs="", recursive=False):
+  with timeout(60):
+    waitfor_cmd_to_exit(remote=remote, cmd_line_parts=["zfs","list","snapshot"], sleep=5)
+    
   snapshot_list=subprocess.check_output(remote+" zfs list -o name -t snapshot -H -r "+fs, shell=True).split("\n")
   toremove=[]
   if recursive:
@@ -134,6 +134,8 @@ def is_zfs_scrub_running(remote="", fs=""):
   return "scrub in process" in zfs_output
   
 def create_zfs_snapshot(remote="", fs="",prefix="", dry_run=False, verbose=False):
+  if is_zfs_scrub_running(remote=remote, fs=fs):
+    raise Exception, "refusing to create snapshot, scrub is running"
   if len(prefix)==0:
     raise ValueError, "prefix for snapshot must be defined"
   snapshot_command=remote+" zfs snapshot "+fs+"@"+prefix+"-"+timestamp_string()
@@ -163,3 +165,58 @@ def clean_zfs_snapshots(remote="", fs="", prefix="", number_to_keep=None, dry_ru
       if not dry_run:
         subprocess.check_call(command, shell=True)
     
+def get_process_list(remote=""):
+  ps = subprocess.Popen(remote+' ps aux', shell=True, stdout=subprocess.PIPE).communicate()[0]
+  processes = ps.split('\n')
+  nfields = len(processes[0].split()) - 1
+  def proc_split(row):
+    return row.split(None,nfields)
+  return map(proc_split,processes[1:-1])
+
+
+class TimeOut(Exception):
+    def __init__(self):
+        Exception.__init__(self,'Timeout ')
+
+def _raise_TimeOut(sig, stack):
+    raise TimeOut()
+
+class timeout(object):
+    def __init__(self, timeout, raise_exception=True):
+        self.timeout = timeout
+        self.raise_exception = raise_exception
+
+    def __enter__(self):
+        self.old_handler = signal.signal(signal.SIGALRM, _raise_TimeOut)
+        signal.alarm(self.timeout)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        signal.signal(signal.SIGALRM, self.old_handler)
+        signal.alarm(0)
+        if exc_type is not TimeOut:
+            return False
+        return not self.raise_exception
+
+def get_pids_for_cmd_line_parts(remote="",cmd_line_parts=[]):
+  pids=[]
+  for line in get_process_list(remote=remote):
+    if len(line)<=1:
+      continue
+    for part in cmd_line_parts:
+      if part not in line[-1]:
+        break
+    else: 
+      pids.append(line[1])
+  return pids
+
+def waitfor_cmd_to_exit(remote="", cmd_line_parts=[], sleep=5):
+  pids=get_pids_for_cmd_line_parts(remote=remote,cmd_line_parts=cmd_line_parts)
+  if len(pids)>0:
+    while True:
+      running=get_process_list(remote=remote)
+      for line in running:
+        if line[1] in pids:
+          time.sleep(sleep)
+          break # exit for loop
+      else:
+        break #no process found, exit while loop
