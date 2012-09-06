@@ -146,5 +146,9 @@ def clean_snapshots(remote="", fs="", prefix="", number_to_keep=None, dry_run=Fa
   number_to_remove= len(snapshot_list)-number_to_keep
   if number_to_remove >0:
     for snap_to_remove in snapshot_list[:number_to_remove]:
-      pass
+      command=remote+" zfs destroy "+snap_to_remove
+      if verbose or dry_run:
+        print command
+      if not dry_run:
+        subprocess.check_call(command, shell=True)
     
