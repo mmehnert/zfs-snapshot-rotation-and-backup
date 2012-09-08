@@ -15,8 +15,8 @@ def get_zfs_filesystems(remote="", fs=""):
   fs=fs[0:-1]
   return fs
 
-def get_zfs_snapshots(remote="", fs="", recursive=False):
-  with timeout(60):
+def get_zfs_snapshots(remote="", fs="", recursive=False, timeout=180):
+  with TimeoutObject(timeout):
     waitfor_cmd_to_exit(remote=remote, cmd_line_parts=["zfs","list","snapshot"], sleep=5)
     
   snapshot_list=subprocess.check_output(remote+" zfs list -o name -t snapshot -H -r "+fs, shell=True).split("\n")
@@ -181,7 +181,7 @@ class TimeOut(Exception):
 def _raise_TimeOut(sig, stack):
     raise TimeOut()
 
-class timeout(object):
+class TimeoutObject(object):
     def __init__(self, timeout, raise_exception=True):
         self.timeout = timeout
         self.raise_exception = raise_exception
