@@ -1,0 +1,11 @@
+Some python scripts to manage rotating zfs snapshots via cron/anacron.
+
+Includes customizable numbers of snapshots to keep for
+daily/weekly/monthly or arbitrary interval snapshots.
+
+Also includes functions to synchronize snapshots (recursively) over ssh.
+
+This started out as a collection of shell scripts (see git history)
+but I rewrote it completely in python for better functionality and
+better scriptability.
+ 
