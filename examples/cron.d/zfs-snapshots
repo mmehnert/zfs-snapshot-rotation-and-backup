@@ -1,0 +1,20 @@
+#
+# cron.d/mdadm -- schedules periodic redundancy checks of MD devices
+#
+# Copyright © martin f. krafft <madduck@madduck.net>
+# distributed under the terms of the Artistic Licence 2.0
+#
+
+# By default, run at 00:57 on every Sunday, but do nothing unless the day of
+# the month is less than or equal to 7. Thus, only run on the first Sunday of
+# each month. crontab(5) sucks, unfortunately, in this regard; therefore this
+# hack (see #380425).
+RUBYLIB = /opt/zsnap/lib
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+
+*/5  * * * *   root    /opt/zfs-backup/snapshot.py -r -k 6 root 5min --verbose
+*/15 * * * *   root    /opt/zfs-backup/snapshot.py -r -k 8 root quarterly --verbose
+0    * * * *   root    /opt/zfs-backup/snapshot.py -r -k 24 root hourly --verbose
+
+
