@@ -25,7 +25,7 @@ class ZFS_pool:
     self.zfs_snapshots=get_zfs_snapshots(remote=self.remote_cmd, fs="", recursive=True, timeout=180)
     return self.zfs_snapshots
   def update_zfs_filesystems(self):
-    self.zfs_filesystems=get_zfs_filesystems(remote=self.remote_cmd,fs="")
+    self.zfs_filesystems=get_zfs_filesystems(remote=self.remote_cmd,fs=self.pool)
     return self.zfs_filesystems
   def get_zfs_snapshots(self,fs="", recursive=False):
     toremove=[]
@@ -95,9 +95,9 @@ def get_last_common_snapshot(src_fs=None, dst_fs=None):
         return src_snapshot  
   return None
 
-def get_last_snapshot(remote="", fs=""):
+def get_last_snapshot(fs=None):
   ss=subprocess.check_output(
-    remote+" zfs list -o name -t snapshot -H -r "+fs+" |grep ^"+fs+"@",shell=True).split("\n")[-2]
+    fs.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+fs.fs+" |grep ^"+fs.fs+"@",shell=True).split("\n")[-2]
   return ss
 
 def transfer_zfs_fs(src_fs=None, dst_fs=None, dry_run=False, verbose=False):
@@ -105,6 +105,7 @@ def transfer_zfs_fs(src_fs=None, dst_fs=None, dry_run=False, verbose=False):
     print "trying to transfer: "+src_fs.pool.remote_cmd+" "+src_fs.fs+" to "+dst_fs.pool.remote_cmd+" "+dst_fs.fs+"."
   
   if dst_fs.fs in dst_fs.pool.zfs_filesystems:
+    print dst_fs.fs+" already exists."
     #target exists
     pass
   else:
@@ -133,7 +134,7 @@ def sync_zfs_fs(src_fs=None,dst_fs=None,target_name="", dry_run=False, verbose=F
   if last_common_snapshot != None:
     sync_mark_snapshot=create_sync_mark_snapshot(fs=src_fs,target_name=target_name, dry_run=dry_run, verbose=verbose)
     if verbose:
-      print "Sync mark created: "+src_fs.pool.remote_cmd+" "+src_fs.fs+"@"+sync_mark_snapshot
+      print "Sync mark created: "+src_fs.pool.remote_cmd+" "+sync_mark_snapshot
       
     rollback=dst_fs.pool.remote_cmd+" zfs rollback -r "+dst_fs.fs+"@"+last_common_snapshot.split("@")[1]
     sync_command=src_fs.pool.remote_cmd+" zfs send -I "+last_common_snapshot+" "+sync_mark_snapshot+ "|"+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
@@ -183,12 +184,12 @@ def is_zfs_scrub_running(remote="", fs=""):
   zfs_output=subprocess.check_output(remote+" zpool status "+pool, shell=True)
   return "scrub in process" in zfs_output
   
-def create_zfs_snapshot(remote="", fs="",prefix="", dry_run=False, verbose=False):
-  if is_zfs_scrub_running(remote=remote, fs=fs):
+def create_zfs_snapshot(fs=None,prefix="", dry_run=False, verbose=False):
+  if is_zfs_scrub_running(remote=fs.pool.remote_cmd, fs=fs.fs):
     raise Exception, "refusing to create snapshot, scrub is running"
   if len(prefix)==0:
     raise ValueError, "prefix for snapshot must be defined"
-  snapshot_command=remote+" zfs snapshot "+fs+"@"+prefix+"-"+timestamp_string()
+  snapshot_command=fs.pool.remote_cmd+" zfs snapshot "+fs.fs+"@"+prefix+"-"+timestamp_string()
   if verbose or dry_run:
     print snapshot_command
   if not dry_run:
