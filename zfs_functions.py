@@ -197,6 +197,13 @@ def create_zfs_snapshot(fs=None,prefix="", dry_run=False, verbose=False):
   if not dry_run:
     subprocess.check_call(snapshot_command, shell=True)
 
+
+def verbose_switch(verbose=False):
+  if verbose==True:
+    return "-v "
+  else:
+    return ""  
+
 def clean_zfs_snapshots(fs=None, prefix="", number_to_keep=None, dry_run=False, verbose=False):
   snapshot_list=fs.get_snapshots()
   toremove=[]
@@ -205,11 +212,11 @@ def clean_zfs_snapshots(fs=None, prefix="", number_to_keep=None, dry_run=False, 
     if (not snapshot_parts[1].startswith(prefix)) or (snapshot_parts[0]!=fs.fs):
       toremove.append(snapshot)
   map(snapshot_list.remove, toremove)
-  
+
   number_to_remove= len(snapshot_list)-number_to_keep
   if number_to_remove >0:
     for snap_to_remove in snapshot_list[:number_to_remove]:
-      command=fs.pool.remote_cmd+" zfs destroy "+snap_to_remove
+      command=fs.pool.remote_cmd+" zfs destroy "+verbose_switch(verbose)+snap_to_remove
       if verbose or dry_run:
         print command
       if not dry_run:
