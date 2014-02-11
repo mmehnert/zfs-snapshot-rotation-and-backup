@@ -159,6 +159,7 @@ def sync_zfs_fs(src_fs=None,dst_fs=None,target_name="", dry_run=False, verbose=F
             print "Sucessfully transferred "+sync_mark_snapshot
           return True
   else:
+      create_sync_mark_snapshot(fs=src_fs,target_name=target_name, dry_run=dry_run, verbose=verbose)
       return transfer_zfs_fs(src_fs=src_fs, dst_fs=dst_fs, dry_run=dry_run, verbose=verbose)
   return False
 
