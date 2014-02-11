@@ -142,6 +142,7 @@ def sync_zfs_fs(src_fs=None,dst_fs=None,target_name="", dry_run=False, verbose=F
     if dry_run==True:
       print rollback
       print sync_command
+      return True
     else:
       if verbose:
         print "Running rollback: "+rollback
