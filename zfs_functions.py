@@ -277,3 +277,31 @@ def waitfor_cmd_to_exit(remote="", cmd_line_parts=[], sleep=5):
           break # exit for loop
       else:
         break #no process found, exit while loop
+
+
+
+
+def clean_other_zfs_snapshots(fs=None, prefixes_to_ignore=[], number_to_keep=None, dry_run=False, verbose=False):
+  snapshot_list=fs.get_snapshots()
+  toremove=[]
+  for snapshot in snapshot_list:
+    snapshot_parts=snapshot.split("@")
+    for prefix in prefixes_to_ignore:
+      if snapshot_parts[1].startswith(prefix):
+        toremove.append(snapshot)
+        break
+    else:
+      if snapshot_parts[0]!=fs.fs:
+        toremove.append(snapshot)
+  map(snapshot_list.remove, toremove)
+  
+  number_to_remove= len(snapshot_list)-number_to_keep
+  if number_to_remove >0:
+    for snap_to_remove in snapshot_list[:number_to_remove]:
+      command=fs.pool.remote_cmd+" zfs destroy "+verbose_switch(verbose)+snap_to_remove
+      if verbose or dry_run:
+        print command
+      if not dry_run:
+        subprocess.check_call(command, shell=True)
+
+
