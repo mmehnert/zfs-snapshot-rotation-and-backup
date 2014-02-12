@@ -7,6 +7,7 @@ Created on 6 Sep 2012
 '''
 
 import argparse
+import sys
 
 from zfs_functions import *
 
@@ -19,11 +20,14 @@ if __name__ == '__main__':
   parser.add_argument("--dry-run", help="Just display what would be done. Notice that since no snapshots will be created, less will be marked for theoretical destruction. ", action="store_true")
   parser.add_argument("--verbose", help="Display what is being done", action="store_true")
   parser.add_argument("--remote", help="e.g. \"ssh hostname\"", default="")
-  
+
   args=parser.parse_args()
   print args
 
-  pool=ZFS_pool(pool=args.fs.split("/")[0],remote_cmd=args.remote)
+  try:
+    pool=ZFS_pool(pool=args.fs.split("/")[0],remote_cmd=args.remote)
+  except subprocess.CalledProcessError, e:
+    sys.exit()
   fs_obj=ZFS_fs(fs=args.fs, pool=pool)
   if args.r==False:
     create_zfs_snapshot(fs=fs_obj,prefix=args.prefix,dry_run=args.dry_run, verbose=args.verbose)
@@ -44,5 +48,4 @@ if __name__ == '__main__':
                     number_to_keep=args.k-1,dry_run=args.dry_run,
                     verbose=args.verbose)
 
-    
-  
+
