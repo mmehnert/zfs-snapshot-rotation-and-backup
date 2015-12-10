@@ -11,14 +11,14 @@ import time
 
 
 class ZFS_pool:
-  remote_cmd=""
+  remote_cmd=" /usr/bin/flock -w 1800 /run/lock/zfs.lock "
   pool=""
   zfs_filesystems=[]
   zfs_snapshots=[]
 
   def __init__(self,pool,remote_cmd=""):
     self.pool=pool
-    self.remote_cmd=remote_cmd
+    self.remote_cmd=remote_cmd+self.remote_cmd
     self.update_zfs_filesystems()
     self.update_zfs_snapshots()
   def update_zfs_snapshots(self):
@@ -137,7 +137,7 @@ def sync_zfs_fs(src_fs=None,dst_fs=None,target_name="", dry_run=False, verbose=F
       print "Sync mark created: "+src_fs.pool.remote_cmd+" "+sync_mark_snapshot
       
     rollback=dst_fs.pool.remote_cmd+" zfs rollback -r "+dst_fs.fs+"@"+last_common_snapshot.split("@")[1]
-    sync_command=src_fs.pool.remote_cmd+" zfs send -I "+last_common_snapshot+" "+sync_mark_snapshot+ "|"+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
+    sync_command=src_fs.pool.remote_cmd+" zfs send -p -I "+last_common_snapshot+" "+sync_mark_snapshot+ "|"+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
 
     if dry_run==True:
       print rollback
@@ -197,13 +197,6 @@ def create_zfs_snapshot(fs=None,prefix="", dry_run=False, verbose=False):
   if not dry_run:
     subprocess.check_call(snapshot_command, shell=True)
 
-
-def verbose_switch(verbose=False):
-  if verbose==True:
-    return "-v "
-  else:
-    return ""  
-
 def clean_zfs_snapshots(fs=None, prefix="", number_to_keep=None, dry_run=False, verbose=False):
   snapshot_list=fs.get_snapshots()
   toremove=[]
@@ -220,7 +213,10 @@ def clean_zfs_snapshots(fs=None, prefix="", number_to_keep=None, dry_run=False, 
       if verbose or dry_run:
         print command
       if not dry_run:
-        subprocess.check_call(command, shell=True)
+        try:
+          subprocess.check_call(command, shell=True)
+        except subprocess.CalledProcessError as e:
+          print e
     
 def get_process_list(remote=""):
   ps = subprocess.Popen(remote+' ps aux', shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -280,6 +276,11 @@ def waitfor_cmd_to_exit(remote="", cmd_line_parts=[], sleep=5):
 
 
 
+def verbose_switch(verbose=False):
+  if verbose==True:
+    return "-v "
+  else:
+    return ""  
 
 def clean_other_zfs_snapshots(fs=None, prefixes_to_ignore=[], number_to_keep=None, dry_run=False, verbose=False):
   snapshot_list=fs.get_snapshots()
@@ -302,6 +303,8 @@ def clean_other_zfs_snapshots(fs=None, prefixes_to_ignore=[], number_to_keep=Non
       if verbose or dry_run:
         print command
       if not dry_run:
-        subprocess.check_call(command, shell=True)
-
+        try:
+          subprocess.check_call(command, shell=True)
+        except subprocess.CalledProcessError as e:
+          print e
 
