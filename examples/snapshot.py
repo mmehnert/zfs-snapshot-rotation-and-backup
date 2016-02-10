@@ -22,11 +22,11 @@ if __name__ == '__main__':
 	parser.add_argument("--remote", help="e.g. \"ssh hostname\"", default="")
 
 	args=parser.parse_args()
-	print args
+	print(args)
 
 	try:
 		pool=ZFS_pool(pool=args.fs.split("/")[0],remote_cmd=args.remote)
-	except subprocess.CalledProcessError, e:
+	except subprocess.CalledProcessError:
 		sys.exit()
 	fs_obj=ZFS_fs(fs=args.fs, pool=pool)
 	if args.r==False:
@@ -47,5 +47,4 @@ if __name__ == '__main__':
 				clean_zfs_snapshots(fs=fs, prefix=args.prefix,
 					number_to_keep=args.k-1,dry_run=args.dry_run,
 					verbose=args.verbose)
-
 
