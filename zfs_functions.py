@@ -207,14 +207,11 @@ def create_sync_mark_snapshot(fs=None, target_name="",dry_run=False, verbose=Fal
 	return sync_mark_snapshot
 
 
-def is_zfs_scrub_running(remote="", fs=""):
-	pool=fs.split("/")[0]
-	zfs_output=subprocess.check_output(remote+" zpool status "+pool, shell=True)
-	return "scrub in process" in zfs_output
+def is_zfs_scrub_running(pool=None):
+	zfs_output=subprocess.check_output(pool.remote_cmd+" zpool status "+pool.pool, shell=True)
+	return  "scrub in progress" in zfs_output
 
 def create_zfs_snapshot(fs=None,prefix="", dry_run=False, verbose=False):
-	if is_zfs_scrub_running(remote=fs.pool.remote_cmd, fs=fs.fs):
-		raise Exception("refusing to create snapshot, scrub is running")
 	if len(prefix)==0:
 		raise ValueError("prefix for snapshot must be defined")
 	snapshot_command=fs.pool.remote_cmd+" zfs snapshot "+fs.fs+"@"+prefix+"-"+timestamp_string()
