@@ -30,21 +30,20 @@ if __name__ == '__main__':
 		sys.exit()
 	fs_obj=ZFS_fs(fs=args.fs, pool=pool)
 	if args.r==False:
-		create_zfs_snapshot(fs=fs_obj,prefix=args.prefix,dry_run=args.dry_run, verbose=args.verbose)
+		fs_obj.create_snapshot(prefix=args.prefix,dry_run=args.dry_run, verbose=args.verbose)
 		if args.k != None and args.k >= 0:
 			#if we are here, the snapshot was created. We did not update, so subtract 1 from args.k
-			clean_zfs_snapshots(fs=fs_obj, prefix=args.prefix,
+			fs_obj.clean_snapshots(prefix=args.prefix,
 				number_to_keep=args.k-1,dry_run=args.dry_run,
 				verbose=args.verbose)
 
 	else:
-		for fs in pool.get_zfs_filesystems(fs=fs_obj.fs):
+		for fs in pool.get_zfs_filesystems(fs_filter=fs_obj.fs):
 			fs=ZFS_fs(fs=fs,pool=pool)
-			create_zfs_snapshot(fs=fs,
-				prefix=args.prefix,dry_run=args.dry_run,
+			fs.create_zfs_snapshot(prefix=args.prefix,dry_run=args.dry_run,
 				verbose=args.verbose)
 			if args.k != None and args.k >= 0:
-				clean_zfs_snapshots(fs=fs, prefix=args.prefix,
+				fs.clean_snapshots(prefix=args.prefix,
 					number_to_keep=args.k-1,dry_run=args.dry_run,
 					verbose=args.verbose)
 

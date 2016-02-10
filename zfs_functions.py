@@ -58,6 +58,7 @@ class ZFS_pool:
 		self.remote_cmd=remote_cmd
 		self.update_zfs_filesystems()
 		self.update_zfs_snapshots()
+
 	def update_zfs_snapshots(self, timeout=180):
 		with TimeoutObject(timeout):
 			waitfor_cmd_to_exit(remote=self.remote_cmd, cmd_line_parts=["zfs","list","snapshot"], sleep=5)
@@ -65,7 +66,6 @@ class ZFS_pool:
 			self.pool, shell=True).split("\n")
 		self.zfs_snapshots=snapshot_list
 		return snapshot_list
-
 
 	def update_zfs_filesystems(self):
 		fs_list=subprocess.check_output(self.remote_cmd+' zfs list -o name -H -r '+self.pool,shell=True).split("\n")
@@ -94,23 +94,16 @@ class ZFS_pool:
 			if snapshot.startswith(match):
 				yield snapshot
 
-	def get_zfs_filesystems(self,fs=""):
-		toremove=[]
-		fs_list=list(self.zfs_filesystems)
-		for match_fs in fs_list:
-			if not match_fs.startswith(fs):
-				toremove.append(match_fs)
-		map(fs_list.remove, toremove)
-		return fs_list
 	def __iter__(self):
 		return ZFS_iterator(self)
+
 	def get_origin(self,fs=None):
 		origin=subprocess.check_output(self.remote_cmd+' zfs get origin '+fs,shell=True).split()
 		origin=origin[6:7][0]
 		return origin
 
 	def get_zfs_filesystems(self, fs_filter=""):
-		for fs in zfs_filesystems:
+		for fs in self.zfs_filesystems:
 			if fs.startswith(fs_filter):
 				yield fs
 
@@ -135,6 +128,10 @@ class ZFS_pool:
 			if fs.startswith(fs_filter):
 				yield fs
 
+	def is_zfs_scrub_running():
+		zfs_output=subprocess.check_output(self.remote_cmd+" zpool status "+pool.pool, shell=True)
+		return  "scrub in progress" in zfs_output
+
 class ZFS_fs:
 	fs=None
 	pool=None
@@ -151,135 +148,167 @@ class ZFS_fs:
 
 	def get_snapshots(self):
 		return self.pool.get_zfs_snapshots(fs=self.fs, recursive=False)
+
 	def get_snapshots_reversed(self):
 		return self.pool.get_zfs_snapshots_reversed(fs=self.fs, recursive=False)
 
-def get_last_common_snapshot(src_fs=None, dst_fs=None):
-	for dst_snapshot in dst_fs.get_snapshots_reversed():
-		for src_snapshot in src_fs.get_snapshots_reversed():
-			if dst_snapshot.split('@')[1] == src_snapshot.split('@')[1]:
-				return src_snapshot
-	return None
+	def get_last_snapshot(self):
+		ss=subprocess.check_output(
+			self.fs.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+fs.fs+" |grep ^"+\
+				fs.fs+"@",shell=True).split("\n")[-2]
+		return ss
 
-def get_last_snapshot(fs=None):
-	ss=subprocess.check_output(
-		fs.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+fs.fs+" |grep ^"+fs.fs+"@",shell=True).split("\n")[-2]
-	return ss
+	def get_last_common_snapshot(self,dst_fs=None):
+		for dst_snapshot in dst_fs.get_snapshots_reversed():
+			for src_snapshot in self.get_snapshots_reversed():
+				if dst_snapshot.split('@')[1] == src_snapshot.split('@')[1]:
+					return src_snapshot
+		return None
 
-def transfer_zfs_fs(src_fs=None, dst_fs=None, dry_run=False, verbose=False):
-	if verbose:
-		print("trying to transfer: "+src_fs.pool.remote_cmd+" "+src_fs.fs+" to "+dst_fs.pool.remote_cmd+" "+dst_fs.fs+".")
-
-	if dst_fs.fs in dst_fs.pool.zfs_filesystems:
-		print(dst_fs.fs+" already exists.")
-		pass
-	else:
-		last_src_snapshot=get_last_snapshot(src_fs)
-		if verbose:
-			print("found "+last_src_snapshot)
-		command=src_fs.pool.remote_cmd+" zfs send -R "+last_src_snapshot+" | "+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
+	def create_zfs_snapshot(self,prefix="", dry_run=False, verbose=False):
+		if len(prefix)==0:
+			raise ValueError("prefix for snapshot must be defined")
+		snapshot=self.fs+"@"+prefix+"-"+self.timestamp_string()
+		snapshot_command=self.pool.remote_cmd+" zfs snapshot "+snapshot
 		if verbose or dry_run:
-			print("running "+command)
+			print("Running: "+snapshot_command)
 		if not dry_run:
-			subprocess.check_call(command,shell=True)
-		return True
+			subprocess.check_call(snapshot_command, shell=True)
+			self.pool.zfs_snapshots.append(snapshot)
+			return snapshot
 
-def sync_zfs_fs(src_fs=None,dst_fs=None,target_name="", dry_run=False, verbose=False):
-	if verbose:
-		print("Syncing "+src_fs.pool.remote_cmd+" "+src_fs.fs+" to "+dst_fs.pool.remote_cmd+" "+dst_fs.fs+" with target name "+target_name+".")
-
-	if dst_fs.fs in dst_fs.pool.zfs_filesystems:
-		last_common_snapshot=get_last_common_snapshot(src_fs=src_fs,dst_fs=dst_fs)
-	else:
+	def transfer_to(self,dst_fs=None, dry_run=False, verbose=False):
 		if verbose:
-			print(dst_fs.pool.remote_cmd+" "+dst_fs.fs+" does not exist.")
-		last_common_snapshot=None
+			print("trying to transfer: "+self.pool.remote_cmd+" "+self.fs+" to "+dst_fs.pool.remote_cmd+" "+dst_fs.fs+".")
 
-	if last_common_snapshot != None:
-		sync_mark_snapshot=create_sync_mark_snapshot(fs=src_fs,target_name=target_name, dry_run=dry_run, verbose=verbose)
+		if dst_fs.fs in dst_fs.pool.zfs_filesystems:
+			print(dst_fs.fs+" already exists.")
+			pass
+		else:
+			last_src_snapshot=self.get_last_snapshot()
+			if verbose:
+				print("found "+last_src_snapshot)
+			command=self.pool.remote_cmd+" zfs send -R "+last_src_snapshot+" | "+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
+			if verbose or dry_run:
+				print("running "+command)
+			if not dry_run:
+				subprocess.check_call(command,shell=True)
+			return True
+
+
+	def sync_with(self,dst_fs=None,target_name="", dry_run=False, verbose=False):
 		if verbose:
-			print("Sync mark created: "+src_fs.pool.remote_cmd+" "+sync_mark_snapshot)
+			print("Syncing "+self.pool.remote_cmd+" "+self.fs+" to "+dst_fs.pool.remote_cmd+" "+dst_fs.fs+" with target name "+target_name+".")
 
-		rollback=dst_fs.pool.remote_cmd+" zfs rollback -r "+dst_fs.fs+"@"+last_common_snapshot.split("@")[1]
-		sync_command=src_fs.pool.remote_cmd+" zfs send -I "+last_common_snapshot+" "+sync_mark_snapshot+ "|"+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
+		if dst_fs.fs in dst_fs.pool.zfs_filesystems:
+			last_common_snapshot=self.get_last_common_snapshot(dst_fs=dst_fs)
+		else:
+			if verbose:
+				print(dst_fs.pool.remote_cmd+" "+dst_fs.fs+" does not exist.")
+			last_common_snapshot=None
 
+		if last_common_snapshot != None:
+			sync_mark_snapshot=self.create_zfs_snapshot(prefix=target_name, dry_run=dry_run, verbose=verbose)
+			if verbose:
+				print("Sync mark created: "+self.pool.remote_cmd+" "+sync_mark_snapshot)
+
+			dst_fs.rollback(last_common_snapshot.split("@")[1],dry_run=dry_run,verbose=verbose)
+			return self.run_sync(dst_fs=dst_fs,start_snap=last_common_snapshot,
+				stop_snap=sync_mark_snapshot,dry_run=dry_run,verbose=verbose)
+
+		else:
+			self.create_zfs_snapshot(prefix=target_name, dry_run=dry_run, verbose=verbose)
+			return self.transfer_to(dst_fs=dst_fs, dry_run=dry_run, verbose=verbose)
+
+	def run_sync(self,dst_fs=None, start_snap=None, stop_snap=None,dry_run=False,verbose=False):
+			sync_command=self.pool.remote_cmd+" zfs send -I "+start_snap+" "+stop_snap+ "|"+\
+				dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
+			if dry_run==True:
+				print(sync_command)
+				return True
+			else:
+				if verbose:
+					print("Running sync: "+sync_command)
+				subprocess.check_call(sync_command,shell=True)
+
+				dst_fs.pool.update_zfs_snapshots()
+				sync_mark=stop_snap.split("@")[1]
+				for snap in dst_fs.get_snapshots():
+					if snap.split("@")[1]==sync_mark:
+						if verbose:
+							print("Sucessfully transferred "+stop_snap)
+						return True
+
+	def rollback(self,snapshot,dry_run=False, verbose=False):
+		rollback=self.pool.remote_cmd+" zfs rollback -r "+self.fs+"@"+snapshot
 		if dry_run==True:
 			print(rollback)
-			print(sync_command)
 			return True
 		else:
 			if verbose:
 				print("Running rollback: "+rollback)
 			subprocess.check_call(rollback,shell=True)
 
-			if verbose:
-				print("Running sync: "+sync_command)
-			subprocess.check_call(sync_command,shell=True)
+	def clean_snapshots(self,prefix="", number_to_keep=None, dry_run=False, verbose=False):
+		snapshot_list=[]
+		for snap in self.get_snapshots():
+			snapshot_list.append(snap)
+		toremove=[]
+		for snapshot in snapshot_list:
+			snapshot_parts=snapshot.split("@")
+			if (not snapshot_parts[1].startswith(prefix)) or (snapshot_parts[0]!=self.fs):
+				toremove.append(snapshot)
+		map(snapshot_list.remove, toremove)
 
-			dst_fs.pool.update_zfs_snapshots()
-			sync_mark=sync_mark_snapshot.split("@")[1]
-			for snap in dst_fs.get_snapshots():
-				if snap.split("@")[1]==sync_mark:
-					if verbose:
-						print("Sucessfully transferred "+sync_mark_snapshot)
-					return True
-	else:
-			create_sync_mark_snapshot(fs=src_fs,target_name=target_name, dry_run=dry_run, verbose=verbose)
-			return transfer_zfs_fs(src_fs=src_fs, dst_fs=dst_fs, dry_run=dry_run, verbose=verbose)
-	return False
+		number_to_remove= len(snapshot_list)-number_to_keep
+		if number_to_remove >0:
+			for snap_to_remove in snapshot_list[:number_to_remove]:
+				self.destroy_snapshot(snap_to_remove=snap_to_remove,dry_run=dry_run,verbose=verbose)
 
-def timestamp_string():
-	return datetime.datetime.today().strftime("%F--%H-%M-%S")
+	def clean_other_snapshots(self,prefixes_to_ignore=[], number_to_keep=None, dry_run=False, verbose=False):
+		snapshot_list=[]
+		for snap in self.get_snapshots():
+			snapshot_list.append(snap)
+		toremove=[]
+		for snapshot in snapshot_list:
+			snapshot_parts=snapshot.split("@")
+			for prefix in prefixes_to_ignore:
+				if snapshot_parts[1].startswith(prefix):
+					toremove.append(snapshot)
+					break
+			else:
+				if snapshot_parts[0]!=self.fs:
+					toremove.append(snapshot)
+		map(snapshot_list.remove, toremove)
 
-def create_sync_mark_snapshot(fs=None, target_name="",dry_run=False, verbose=False):
-	if len(target_name) == 0:
-		raise ValueError("target_name for synchronization markers must be defined")
-	sync_mark_snapshot=fs.fs+"@"+target_name+"-"+timestamp_string()
-	command=fs.pool.remote_cmd+" zfs snapshot "+sync_mark_snapshot
-	if dry_run == True:
-		print(command)
-	else:
-		if verbose:
-			print("Running "+command)
-		subprocess.check_call(command,shell=True)
-	return sync_mark_snapshot
+		number_to_remove= len(snapshot_list)-number_to_keep
+		if number_to_remove >0:
+			for snap_to_remove in snapshot_list[:number_to_remove]:
+				self.destroy_snapshot(snap_to_remove=snap_to_remove,dry_run=dry_run,verbose=verbose)
+
+	def destroy_snapshot(self,snap_to_remove,dry_run=False, verbose=False):
+		command=self.pool.remote_cmd+" zfs destroy "+self.verbose_switch(verbose)+snap_to_remove
+		if verbose or dry_run:
+			print(command)
+		if not dry_run:
+			try:
+				subprocess.check_call(command, shell=True)
+				self.pool.zfs_snapshots.remove(snap_to_remove)
+			except subprocess.CalledProcessError as e:
+				print(e)
+
+	def timestamp_string(self):
+		return datetime.datetime.today().strftime("%F--%H-%M-%S")
+
+	def verbose_switch(self,verbose=False):
+		if verbose==True:
+			return "-v "
+		else:
+			return ""
 
 
-def is_zfs_scrub_running(pool=None):
-	zfs_output=subprocess.check_output(pool.remote_cmd+" zpool status "+pool.pool, shell=True)
-	return  "scrub in progress" in zfs_output
 
-def create_zfs_snapshot(fs=None,prefix="", dry_run=False, verbose=False):
-	if len(prefix)==0:
-		raise ValueError("prefix for snapshot must be defined")
-	snapshot_command=fs.pool.remote_cmd+" zfs snapshot "+fs.fs+"@"+prefix+"-"+timestamp_string()
-	if verbose or dry_run:
-		print(snapshot_command)
-	if not dry_run:
-		subprocess.check_call(snapshot_command, shell=True)
 
-def clean_zfs_snapshots(fs=None, prefix="", number_to_keep=None, dry_run=False, verbose=False):
-	snapshot_list=[]
-	for snap in fs.get_snapshots():
-		snapshot_list.append(snap)
-	toremove=[]
-	for snapshot in snapshot_list:
-		snapshot_parts=snapshot.split("@")
-		if (not snapshot_parts[1].startswith(prefix)) or (snapshot_parts[0]!=fs.fs):
-			toremove.append(snapshot)
-	map(snapshot_list.remove, toremove)
-
-	number_to_remove= len(snapshot_list)-number_to_keep
-	if number_to_remove >0:
-		for snap_to_remove in snapshot_list[:number_to_remove]:
-			command=fs.pool.remote_cmd+" zfs destroy "+verbose_switch(verbose)+snap_to_remove
-			if verbose or dry_run:
-				print(command)
-			if not dry_run:
-				try:
-					subprocess.check_call(command, shell=True)
-				except subprocess.CalledProcessError as e:
-					print(e)
 
 def get_process_list(remote=""):
 	ps = subprocess.Popen(remote+' ps aux', shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -288,7 +317,6 @@ def get_process_list(remote=""):
 	def proc_split(row):
 		return row.split(None,nfields)
 	return map(proc_split,processes[1:-1])
-
 
 class TimeOut(Exception):
 		def __init__(self):
@@ -336,41 +364,4 @@ def waitfor_cmd_to_exit(remote="", cmd_line_parts=[], sleep=5):
 					break # exit for loop
 			else:
 				break #no process found, exit while loop
-
-
-
-def verbose_switch(verbose=False):
-	if verbose==True:
-		return "-v "
-	else:
-		return ""
-
-def clean_other_zfs_snapshots(fs=None, prefixes_to_ignore=[], number_to_keep=None, dry_run=False, verbose=False):
-	snapshot_list=[]
-	for snap in fs.get_snapshots():
-		snapshot_list.append(snap)
-	toremove=[]
-	for snapshot in snapshot_list:
-		snapshot_parts=snapshot.split("@")
-		for prefix in prefixes_to_ignore:
-			if snapshot_parts[1].startswith(prefix):
-				toremove.append(snapshot)
-				break
-		else:
-			if snapshot_parts[0]!=fs.fs:
-				toremove.append(snapshot)
-	map(snapshot_list.remove, toremove)
-
-	number_to_remove= len(snapshot_list)-number_to_keep
-	if number_to_remove >0:
-		for snap_to_remove in snapshot_list[:number_to_remove]:
-			command=fs.pool.remote_cmd+" zfs destroy "+verbose_switch(verbose)+snap_to_remove
-			if verbose or dry_run:
-				print(command)
-			if not dry_run:
-				try:
-					subprocess.check_call(command, shell=True)
-				except subprocess.CalledProcessError as e:
-					print(e)
-
 
