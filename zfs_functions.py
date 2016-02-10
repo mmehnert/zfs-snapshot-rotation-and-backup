@@ -9,30 +9,41 @@ import datetime
 import signal
 import time
 
-class ZFS_fs_iterator:
-	zfs=[]
-	remote_cmd=""
+class ZFS_iterator:
+	pool=None
 	i = 0
 
 	def __init__(self,pool):
-			self.remote_cmd=pool.remote_cmd
-			self.zfs=pool.zfs_filesystems
-			self.i = 0
+		self.pool=pool
+		self.i = 0
 
 	def __iter__(self):
 			return self
 
 	def next(self):
-		if self.i < len(self.zfs):
+		if self.i < len(self.pool.zfs_filesystems):
 			i = self.i
 			self.i += 1
-			origin=get_origin(fs=self.zfs[i],remote=self.remote_cmd)
+			origin=self.pool.get_origin(fs=self.pool.zfs_filesystems[i])
 			if origin != "-":
 				origin=origin.split('@')[0]
-				a, b = self.zfs.index(self.zfs[i]), self.zfs.index(origin)
+				a, b = self.pool.zfs_filesystems.index(self.pool.zfs_filesystems[i]),\
+					self.pool.zfs_filesystems.index(origin)
 				if a < b:
-					self.zfs[b], self.zfs[a] = self.zfs[a], self.zfs[b]
-			return self.zfs[i]
+					self.pool.zfs_filesystems[b], self.pool.zfs_filesystems[a] = \
+						self.pool.zfs_filesystems[a], self.pool.zfs_filesystems[b]
+			return self.pool.zfs_filesystems[i]
+		else:
+			raise StopIteration()
+
+	def __iter__(self):
+			return self
+
+	def next(self):
+		if self.i < len(self.pool.zfs_filesystems):
+			i = self.i
+			self.i += 1
+			return self.pool.zfs_filesystems[i]
 		else:
 			raise StopIteration()
 
@@ -47,24 +58,42 @@ class ZFS_pool:
 		self.remote_cmd=remote_cmd
 		self.update_zfs_filesystems()
 		self.update_zfs_snapshots()
-	def update_zfs_snapshots(self):
-		self.zfs_snapshots=get_zfs_snapshots(remote=self.remote_cmd, fs="", recursive=True, timeout=180)
-		return self.zfs_snapshots
-	def update_zfs_filesystems(self):
-		self.zfs_filesystems=get_zfs_filesystems(remote=self.remote_cmd,fs=self.pool)
-		return self.zfs_filesystems
-	def get_zfs_snapshots(self,fs="", recursive=False):
-		toremove=[]
-		if recursive:
-			match=fs
-		else:
-			match=fs+"@"
-		snapshot_list=list(self.zfs_snapshots)
-		for snapshot in snapshot_list:
-			if not snapshot.startswith(match):
-				toremove.append(snapshot)
-		map(snapshot_list.remove, toremove)
+	def update_zfs_snapshots(self, timeout=180):
+		with TimeoutObject(timeout):
+			waitfor_cmd_to_exit(remote=self.remote_cmd, cmd_line_parts=["zfs","list","snapshot"], sleep=5)
+		snapshot_list=subprocess.check_output(self.remote_cmd+" zfs list -o name -t snapshot -H -r "+\
+			self.pool, shell=True).split("\n")
+		self.zfs_snapshots=snapshot_list
 		return snapshot_list
+
+
+	def update_zfs_filesystems(self):
+		fs_list=subprocess.check_output(self.remote_cmd+' zfs list -o name -H -r '+self.pool,shell=True).split("\n")
+		fs_list=fs_list[0:-1]
+		i=0
+		while i < len(fs_list):
+			origin=self.get_origin(fs_list[i])
+			if origin != "-":
+				origin=origin.split('@')[0]
+				a, b = fs_list.index(fs_list[i]), fs_list.index(origin)
+				if a < b:
+					fs_list[b], fs_list[a] = fs_list[a], fs_list[b]
+			i += 1
+		self.zfs_filesystems=fs_list
+		return self.zfs_filesystems
+
+	def get_zfs_snapshots(self,fs="", recursive=False):
+		match=fs if recursive else fs+"@"
+		for snapshot in self.zfs_snapshots:
+			if snapshot.startswith(match):
+				yield snapshot
+
+	def get_zfs_snapshots_reversed(self,fs="", recursive=False):
+		match=fs if recursive else fs+"@"
+		for snapshot in reversed(self.zfs_snapshots):
+			if snapshot.startswith(match):
+				yield snapshot
+
 	def get_zfs_filesystems(self,fs=""):
 		toremove=[]
 		fs_list=list(self.zfs_filesystems)
@@ -74,7 +103,37 @@ class ZFS_pool:
 		map(fs_list.remove, toremove)
 		return fs_list
 	def __iter__(self):
-		return ZFS_fs_iterator(self)
+		return ZFS_iterator(self)
+	def get_origin(self,fs=None):
+		origin=subprocess.check_output(self.remote_cmd+' zfs get origin '+fs,shell=True).split()
+		origin=origin[6:7][0]
+		return origin
+
+	def get_zfs_filesystems(self, fs_filter=""):
+		for fs in zfs_filesystems:
+			if fs.startswith(fs_filter):
+				yield fs
+
+	def sort_for_destruction(self,fs_filter=""):
+		zfs_fs=list(self.zfs_filesystems)
+		for fs in zfs_fs:
+			fs_parts=fs.split("/")
+			if len(fs_parts) > 1:
+				parent="/".join(fs_parts[0:len(fs_parts)-1])
+				parentIdx=zfs_fs.index(parent)
+				if parentIdx < zfs_fs.index(fs):
+					zfs_fs.remove(fs)
+					zfs_fs.insert(parentIdx,fs)
+		for fs in zfs_fs:
+			origin=self.get_origin(fs=fs)
+			if origin != "-":
+				origin=origin.split('@')[0]
+				zfs_fs.remove(fs)
+				originIdx=zfs_fs.index(origin)
+				zfs_fs.insert(originIdx,fs)
+		for fs in zfs_fs:
+			if fs.startswith(fs_filter):
+				yield fs
 
 class ZFS_fs:
 	fs=None
@@ -92,31 +151,12 @@ class ZFS_fs:
 
 	def get_snapshots(self):
 		return self.pool.get_zfs_snapshots(fs=self.fs, recursive=False)
-
-def get_zfs_filesystems(remote="", fs=""):
-	fs=subprocess.check_output(remote+' zfs list -o name -H -r '+fs,shell=True).split("\n")
-	fs=fs[0:-1]
-	return fs
-
-def get_zfs_snapshots(remote="", fs="", recursive=False, timeout=180):
-	with TimeoutObject(timeout):
-		waitfor_cmd_to_exit(remote=remote, cmd_line_parts=["zfs","list","snapshot"], sleep=5)
-
-	snapshot_list=subprocess.check_output(remote+" zfs list -o name -t snapshot -H -r "+fs, shell=True).split("\n")
-	toremove=[]
-	if recursive:
-		match=fs
-	else:
-		match=fs+"@"
-	for snapshot in snapshot_list:
-		if not snapshot.startswith(match):
-			toremove.append(snapshot)
-	map(snapshot_list.remove, toremove)
-	return snapshot_list
+	def get_snapshots_reversed(self):
+		return self.pool.get_zfs_snapshots_reversed(fs=self.fs, recursive=False)
 
 def get_last_common_snapshot(src_fs=None, dst_fs=None):
-	for dst_snapshot in reversed(dst_fs.get_snapshots()):
-		for src_snapshot in reversed(src_fs.get_snapshots()):
+	for dst_snapshot in dst_fs.get_snapshots_reversed():
+		for src_snapshot in src_fs.get_snapshots_reversed():
 			if dst_snapshot.split('@')[1] == src_snapshot.split('@')[1]:
 				return src_snapshot
 	return None
@@ -132,10 +172,8 @@ def transfer_zfs_fs(src_fs=None, dst_fs=None, dry_run=False, verbose=False):
 
 	if dst_fs.fs in dst_fs.pool.zfs_filesystems:
 		print(dst_fs.fs+" already exists.")
-		#target exists
 		pass
 	else:
-		#transfer
 		last_src_snapshot=get_last_snapshot(src_fs)
 		if verbose:
 			print("found "+last_src_snapshot)
@@ -221,7 +259,9 @@ def create_zfs_snapshot(fs=None,prefix="", dry_run=False, verbose=False):
 		subprocess.check_call(snapshot_command, shell=True)
 
 def clean_zfs_snapshots(fs=None, prefix="", number_to_keep=None, dry_run=False, verbose=False):
-	snapshot_list=fs.get_snapshots()
+	snapshot_list=[]
+	for snap in fs.get_snapshots():
+		snapshot_list.append(snap)
 	toremove=[]
 	for snapshot in snapshot_list:
 		snapshot_parts=snapshot.split("@")
@@ -306,7 +346,9 @@ def verbose_switch(verbose=False):
 		return ""
 
 def clean_other_zfs_snapshots(fs=None, prefixes_to_ignore=[], number_to_keep=None, dry_run=False, verbose=False):
-	snapshot_list=fs.get_snapshots()
+	snapshot_list=[]
+	for snap in fs.get_snapshots():
+		snapshot_list.append(snap)
 	toremove=[]
 	for snapshot in snapshot_list:
 		snapshot_parts=snapshot.split("@")
@@ -331,8 +373,4 @@ def clean_other_zfs_snapshots(fs=None, prefixes_to_ignore=[], number_to_keep=Non
 				except subprocess.CalledProcessError as e:
 					print(e)
 
-def get_origin(fs=None, remote=""):
-	origin=subprocess.check_output(remote+' zfs get origin '+fs,shell=True).split()
-	origin=origin[6:7][0]
-	return origin
 
