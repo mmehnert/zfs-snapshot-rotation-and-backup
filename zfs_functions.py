@@ -8,6 +8,8 @@ import subprocess
 import datetime
 import signal
 import time
+import pprint
+pp = pprint.PrettyPrinter(indent=4)
 
 class ZFS_iterator:
 	verbose=False
@@ -69,12 +71,12 @@ class ZFS_pool:
 		with TimeoutObject(timeout):
 			waitfor_cmd_to_exit(remote=self.remote_cmd, cmd_line_parts=["zfs","list","snapshot"], sleep=5)
 		snapshot_list=subprocess.check_output(self.remote_cmd+" zfs list -o name -t snapshot -H -r "+\
-			self.pool, shell=True).split("\n")
+			self.pool, shell=True,universal_newlines=True).split("\n")
 		self.zfs_snapshots=snapshot_list
 		return snapshot_list
 
 	def update_zfs_filesystems(self):
-		fs_list=subprocess.check_output(self.remote_cmd+' zfs list -o name -H -r '+self.pool,shell=True).split("\n")
+		fs_list=subprocess.check_output(self.remote_cmd+' zfs list -o name -H -r '+self.pool,shell=True,universal_newlines=True).split("\n")
 		fs_list=fs_list[0:-1]
 		i=0
 		while i < len(fs_list):
@@ -104,7 +106,7 @@ class ZFS_pool:
 		return ZFS_iterator(self)
 
 	def get_origin(self,fs=None):
-		origin=subprocess.check_output(self.remote_cmd+' zfs get origin '+fs,shell=True).split()
+		origin=subprocess.check_output(self.remote_cmd+' zfs get origin '+fs,shell=True,universal_newlines=True).split()
 		origin=origin[6:7][0]
 		return origin
 
@@ -134,7 +136,7 @@ class ZFS_pool:
 			if fs.startswith(fs_filter):
 				yield fs
 
-	def is_zfs_scrub_running():
+	def scrub_running():
 		zfs_output=subprocess.check_output(self.remote_cmd+" zpool status "+pool.pool, shell=True)
 		return  "scrub in progress" in zfs_output
 
@@ -163,7 +165,7 @@ class ZFS_fs:
 	def get_last_snapshot(self):
 		ss=subprocess.check_output(
 			self.fs.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+fs.fs+" |grep ^"+\
-				fs.fs+"@",shell=True).split("\n")[-2]
+				fs.fs+"@",shell=True,universal_newlines=True).split("\n")[-2]
 		return ss
 
 	def get_last_common_snapshot(self,dst_fs=None):
@@ -315,7 +317,8 @@ class ZFS_fs:
 
 
 def get_process_list(remote=""):
-	ps = subprocess.Popen(remote+' ps aux', shell=True, stdout=subprocess.PIPE).communicate()[0]
+	ps = subprocess.Popen(remote+' ps aux', shell=True, universal_newlines=True,\
+		 stdout=subprocess.PIPE).communicate()[0]
 	processes = ps.split('\n')
 	nfields = len(processes[0].split()) - 1
 	def proc_split(row):
