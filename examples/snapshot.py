@@ -1,8 +1,6 @@
 #!/usr/bin/python
 
 '''
-Created on 6 Sep 2012
-
 @author: Maximilian Mehnert <maximilian.mehnert@gmx.de>
 '''
 
@@ -28,22 +26,17 @@ if __name__ == '__main__':
 		pool=ZFS_pool(pool=args.fs.split("/")[0],remote_cmd=args.remote)
 	except subprocess.CalledProcessError:
 		sys.exit()
-	fs_obj=ZFS_fs(fs=args.fs, pool=pool)
+	fs_obj=ZFS_fs(fs=args.fs, pool=pool, verbose=args.verbose, dry_run=args.dry_run)
 	if args.r==False:
-		fs_obj.create_snapshot(prefix=args.prefix,dry_run=args.dry_run, verbose=args.verbose)
+		fs_obj.create_snapshot(prefix=args.prefix)
 		if args.k != None and args.k >= 0:
 			#if we are here, the snapshot was created. We did not update, so subtract 1 from args.k
-			fs_obj.clean_snapshots(prefix=args.prefix,
-				number_to_keep=args.k-1,dry_run=args.dry_run,
-				verbose=args.verbose)
+			fs_obj.clean_snapshots(prefix=args.prefix, number_to_keep=args.k-1)
 
 	else:
 		for fs in pool.get_zfs_filesystems(fs_filter=fs_obj.fs):
-			fs=ZFS_fs(fs=fs,pool=pool)
-			fs.create_zfs_snapshot(prefix=args.prefix,dry_run=args.dry_run,
-				verbose=args.verbose)
+			fs=ZFS_fs(fs=fs, pool=pool, verbose=args.verbose, dry_run=args.dry_run)
+			fs.create_zfs_snapshot(prefix=args.prefix)
 			if args.k != None and args.k >= 0:
-				fs.clean_snapshots(prefix=args.prefix,
-					number_to_keep=args.k-1,dry_run=args.dry_run,
-					verbose=args.verbose)
+				fs.clean_snapshots(prefix=args.prefix, number_to_keep=args.k-1)
 
