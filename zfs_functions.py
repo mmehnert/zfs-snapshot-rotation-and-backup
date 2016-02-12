@@ -258,15 +258,13 @@ class ZFS_fs:
 			subprocess.check_call(rollback,shell=True)
 
 	def clean_snapshots(self,prefix="", number_to_keep=None):
+		if self.verbose == True:
+			print("clean_snapshots:")
 		snapshot_list=[]
-		for snap in self.get_snapshots():
-			snapshot_list.append(snap)
-		toremove=[]
-		for snapshot in snapshot_list:
+		for snapshot in self.get_snapshots():
 			snapshot_parts=snapshot.split("@")
-			if (not snapshot_parts[1].startswith(prefix)) or (snapshot_parts[0]!=self.fs):
-				toremove.append(snapshot)
-		map(snapshot_list.remove, toremove)
+			if snapshot_parts[1].startswith(prefix):
+				snapshot_list.append(snapshot)
 
 		number_to_remove= len(snapshot_list)-number_to_keep
 		if number_to_remove >0:
@@ -274,20 +272,18 @@ class ZFS_fs:
 				self.destroy_snapshot(snap_to_remove=snap_to_remove)
 
 	def clean_other_snapshots(self,prefixes_to_ignore=[], number_to_keep=None):
+		if self.verbose == True:
+			print("cloean_other_snapshots:")
 		snapshot_list=[]
-		for snap in self.get_snapshots():
-			snapshot_list.append(snap)
-		toremove=[]
-		for snapshot in snapshot_list:
+		for snapshot in self.get_snapshots():
+			skip=False
 			snapshot_parts=snapshot.split("@")
 			for prefix in prefixes_to_ignore:
 				if snapshot_parts[1].startswith(prefix):
-					toremove.append(snapshot)
+					skip=True
 					break
-			else:
-				if snapshot_parts[0]!=self.fs:
-					toremove.append(snapshot)
-		map(snapshot_list.remove, toremove)
+			if skip==False:
+				snapshot_list.append(snapshot)
 
 		number_to_remove= len(snapshot_list)-number_to_keep
 		if number_to_remove >0:
