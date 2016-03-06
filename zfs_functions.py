@@ -269,7 +269,7 @@ class ZFS_fs:
 
 	def clean_snapshots(self,prefix="", number_to_keep=None):
 		if self.verbose == True:
-			print("clean_snapshots:"+self)
+			print("clean_snapshots:"+str(self))
 		snapshot_list=[]
 		for snapshot in self.get_snapshots():
 			snapshot_parts=snapshot.split("@")
@@ -283,7 +283,7 @@ class ZFS_fs:
 
 	def clean_other_snapshots(self,prefixes_to_ignore=[], number_to_keep=None):
 		if self.verbose == True:
-			print("cloean_other_snapshots:"+self)
+			print("cloean_other_snapshots:"+str(self))
 		snapshot_list=[]
 		for snapshot in self.get_snapshots():
 			skip=False
