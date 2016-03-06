@@ -168,6 +168,12 @@ class ZFS_fs:
 				fs.fs+"@",shell=True,universal_newlines=True).split("\n")[-2]
 		return ss
 
+	def get_first_snapshot(self):
+		ss=subprocess.check_output(
+			self.fs.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+fs.fs+" |grep ^"+\
+				fs.fs+"@",shell=True,universal_newlines=True).split("\n")[0]
+		return ss
+
 	def get_last_common_snapshot(self,dst_fs=None):
 		for dst_snapshot in dst_fs.get_snapshots_reversed():
 			for src_snapshot in self.get_snapshots_reversed():
@@ -196,9 +202,10 @@ class ZFS_fs:
 			pass
 		else:
 			last_src_snapshot=self.get_last_snapshot()
+			first_src_snapshot=self.get_first_snapshot()
 			if self.verbose:
 				print("found "+last_src_snapshot)
-			command=self.pool.remote_cmd+" zfs send -R "+last_src_snapshot+" | "+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
+			command=self.pool.remote_cmd+" zfs send -p -I "+first_src_snapshot+" "+last_src_snapshot+" | "+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
 			if self.verbose or self.dry_run:
 				print("running "+command)
 			if not self.dry_run:
@@ -231,7 +238,7 @@ class ZFS_fs:
 			return self.transfer_to(dst_fs=dst_fs)
 
 	def run_sync(self,dst_fs=None, start_snap=None, stop_snap=None):
-			sync_command=self.pool.remote_cmd+" zfs send -I "+start_snap+" "+stop_snap+ "|"+\
+			sync_command=self.pool.remote_cmd+" zfs send -p -I "+start_snap+" "+stop_snap+ "|"+\
 				dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
 			if self.dry_run==True:
 				print(sync_command)
@@ -318,7 +325,7 @@ class ZFS_fs:
 
 def get_process_list(remote=""):
 	ps = subprocess.Popen(remote+' ps aux', shell=True, universal_newlines=True,\
-		 stdout=subprocess.PIPE).communicate()[0]
+		stdout=subprocess.PIPE).communicate()[0]
 	processes = ps.split('\n')
 	nfields = len(processes[0].split()) - 1
 	def proc_split(row):
