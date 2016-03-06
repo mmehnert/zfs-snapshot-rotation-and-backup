@@ -26,7 +26,6 @@ if __name__ == '__main__':
 			# here we are deleting older snapshots starting with transfer_marker_prefix, in this case keeping
 			# the youngest three
 			src_fs.clean_snapshots(prefix=transfer_marker_prefix, number_to_keep=3)
-			src_fs.clean_snapshots(prefix=transfer_marker_prefix, number_to_keep=3)
 			# on the destination pool (in this case local machine, see above), clean up snapshots starting with the prefixes below,
 			# keeping the youngest n according to the second part of the tuples
 			for tuple in [["5min",1],

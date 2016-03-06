@@ -54,6 +54,7 @@ class ZFS_iterator:
 class ZFS_pool:
 	verbose=False
 	dry_run=False
+	destructive=False
 	remote_cmd=""
 	pool=""
 	zfs_filesystems=[]
@@ -61,13 +62,14 @@ class ZFS_pool:
 	def __str__(self):
 		return "pool["+self.remote_cmd+"]<"+self.pool+">"
 
-	def __init__(self,pool,remote_cmd="",verbose=False,dry_run=False):
+	def __init__(self,pool,remote_cmd="",verbose=False,dry_run=False,destructive=False):
 		self.pool=pool
 		self.remote_cmd=remote_cmd
 		self.update_zfs_filesystems()
 		self.update_zfs_snapshots()
 		self.verbose=verbose
 		self.dry_run=dry_run
+		self.destructive=destructive
 
 	def update_zfs_snapshots(self, timeout=180):
 		with TimeoutObject(timeout):
@@ -145,10 +147,11 @@ class ZFS_pool:
 class ZFS_fs:
 	fs=None
 	pool=None
+	destructive=False
 
 	def __str__(self):
 		return str(self.pool)+" fs:"+self.fs
-	def __init__(self,fs=None,remote_cmd="", pool=None, verbose=False, dry_run=False):
+	def __init__(self,fs=None,remote_cmd="", pool=None, verbose=False, dry_run=False, destructive=False):
 		self.verbose=verbose
 		self.dry_run=dry_run
 		if fs==None:
@@ -195,25 +198,37 @@ class ZFS_fs:
 		if not self.dry_run:
 			subprocess.check_call(snapshot_command, shell=True)
 			self.pool.zfs_snapshots.append(snapshot)
-			return snapshot
+		return snapshot
+
+	def destroy_zfs_snapshot(self,snapshot):
+		snapshot_command=self.pool.remote_cmd+" zfs destroy "+snapshot
+		if self.verbose or self.dry_run:
+			print("Running: "+snapshot_command)
+		if not self.dry_run:
+			subprocess.check_call(snapshot_command, shell=True)
 
 	def transfer_to(self,dst_fs=None):
 		if self.verbose:
 			print("trying to transfer: "+self.pool.remote_cmd+" "+self.fs+" to "+dst_fs.pool.remote_cmd+" "+dst_fs.fs+".")
-
 		if dst_fs.fs in dst_fs.pool.zfs_filesystems:
 			print(dst_fs.fs+" already exists.")
-			pass
-		else:
+		if self.destructive:
+			print ("resetting "+dst_fs.fs)
 			last_src_snapshot=self.get_last_snapshot()
 			first_src_snapshot=self.get_first_snapshot()
-			if self.verbose:
-				print("found "+last_src_snapshot)
-			command=self.pool.remote_cmd+" zfs send -p -I "+first_src_snapshot+" "+last_src_snapshot+" | "+dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
-			if self.verbose or self.dry_run:
-				print("running "+command)
-			if not self.dry_run:
-				subprocess.check_call(command,shell=True)
+			for snapshot in dst_fs.get_snapshots_reversed():
+				dst_fs.destroy_zfs_snapshot(snapshot)
+			commands=[\
+				self.pool.remote_cmd+" zfs send -p  "+first_src_snapshot+" | "+\
+					dst_fs.pool.remote_cmd+" zfs receive -F "+dst_fs.fs,\
+				self.pool.remote_cmd+" zfs send -p -I "+first_src_snapshot+" "+last_src_snapshot+" | "+\
+					dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs 
+			]
+			for command in commands:
+				if self.verbose or self.dry_run:
+					print("running "+command)
+				if not self.dry_run:
+					subprocess.check_call(command,shell=True)
 			return True
 
 
@@ -283,7 +298,7 @@ class ZFS_fs:
 
 	def clean_other_snapshots(self,prefixes_to_ignore=[], number_to_keep=None):
 		if self.verbose == True:
-			print("cloean_other_snapshots:"+str(self))
+			print("clean_other_snapshots:"+str(self))
 		snapshot_list=[]
 		for snapshot in self.get_snapshots():
 			skip=False
