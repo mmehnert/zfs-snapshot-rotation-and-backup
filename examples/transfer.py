@@ -16,12 +16,12 @@ if __name__ == '__main__':
 	dst_prefix="all/backup/"
 
 	for fs in src_pool:
-		print fs
+		print (fs)
 		src_fs=ZFS_fs(fs=fs, pool=src_pool, verbose=True)
 		dst_fs=ZFS_fs(fs=dst_prefix+fs,pool=dst_pool, verbose=True)
 
 		if not src_fs.sync_with(dst_fs=dst_fs,target_name=transfer_marker_prefix):
-			print "sync failure for "+fs
+			print ("sync failure for "+fs)
 		else:
 			# here we are deleting older snapshots starting with transfer_marker_prefix, in this case keeping
 			# the youngest three
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 										["daily",7],
 										["weekly",4],
 										["monthly",12]]:
-				dst_fs.clean_zfs_snapshots(prefix=tuple[0], number_to_keep=tuple[1])
+				dst_fs.clean_snapshots(prefix=tuple[0], number_to_keep=tuple[1])
 			# now we clean up unrelated snapshots both on the remote and local machine, ignoring those starting with the prefixes
 			# configured below, keeping the 10 youngest
 			prefixes_to_ignore=["hourly","weekly","quarterly","daily","weekly","monthly","yearly",transfer_marker_prefix]
