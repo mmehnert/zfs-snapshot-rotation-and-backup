@@ -164,14 +164,14 @@ class ZFS_fs:
 
 	def get_last_snapshot(self):
 		ss=subprocess.check_output(
-			self.fs.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+fs.fs+" |grep ^"+\
-				fs.fs+"@",shell=True,universal_newlines=True).split("\n")[-2]
+			self.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+self.fs+" |grep ^"+\
+				self.fs+"@",shell=True,universal_newlines=True).split("\n")[-2]
 		return ss
 
 	def get_first_snapshot(self):
 		ss=subprocess.check_output(
-			self.fs.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+fs.fs+" |grep ^"+\
-				fs.fs+"@",shell=True,universal_newlines=True).split("\n")[0]
+			self.pool.remote_cmd+" zfs list -o name -t snapshot -H -r "+self.fs+" |grep ^"+\
+				self.fs+"@",shell=True,universal_newlines=True).split("\n")[0]
 		return ss
 
 	def get_last_common_snapshot(self,dst_fs=None):
