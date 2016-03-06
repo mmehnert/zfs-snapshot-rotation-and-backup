@@ -58,6 +58,8 @@ class ZFS_pool:
 	pool=""
 	zfs_filesystems=[]
 	zfs_snapshots=[]
+	def __str__(self):
+		return "pool["+self.remote_cmd+"]<"+self.pool+">"
 
 	def __init__(self,pool,remote_cmd="",verbose=False,dry_run=False):
 		self.pool=pool
@@ -144,6 +146,8 @@ class ZFS_fs:
 	fs=None
 	pool=None
 
+	def __str__(self):
+		return str(self.pool)+" fs:"+self.fs
 	def __init__(self,fs=None,remote_cmd="", pool=None, verbose=False, dry_run=False):
 		self.verbose=verbose
 		self.dry_run=dry_run
@@ -265,7 +269,7 @@ class ZFS_fs:
 
 	def clean_snapshots(self,prefix="", number_to_keep=None):
 		if self.verbose == True:
-			print("clean_snapshots:")
+			print("clean_snapshots:"+self)
 		snapshot_list=[]
 		for snapshot in self.get_snapshots():
 			snapshot_parts=snapshot.split("@")
@@ -279,7 +283,7 @@ class ZFS_fs:
 
 	def clean_other_snapshots(self,prefixes_to_ignore=[], number_to_keep=None):
 		if self.verbose == True:
-			print("cloean_other_snapshots:")
+			print("cloean_other_snapshots:"+self)
 		snapshot_list=[]
 		for snapshot in self.get_snapshots():
 			skip=False
