@@ -238,23 +238,20 @@ class ZFS_fs:
 			return self.transfer_to(dst_fs=dst_fs)
 
 	def run_sync(self,dst_fs=None, start_snap=None, stop_snap=None):
-			sync_command=self.pool.remote_cmd+" zfs send -p -I "+start_snap+" "+stop_snap+ "|"+\
-				dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
-			if self.dry_run==True:
-				print(sync_command)
-				return True
-			else:
-				if self.verbose:
-					print("Running sync: "+sync_command)
-				subprocess.check_call(sync_command,shell=True)
+		sync_command=self.pool.remote_cmd+" zfs send -p -I "+start_snap+" "+stop_snap+ "|"+\
+			dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs
+		if self.verbose or self.dry_run:
+			print("Running sync: "+sync_command)
+		if not self.dry_run:
+			subprocess.check_call(sync_command,shell=True)
 
-				dst_fs.pool.update_zfs_snapshots()
-				sync_mark=stop_snap.split("@")[1]
-				for snap in dst_fs.get_snapshots():
-					if snap.split("@")[1]==sync_mark:
-						if self.verbose:
-							print("Sucessfully transferred "+stop_snap)
-						return True
+			dst_fs.pool.update_zfs_snapshots()
+			sync_mark=stop_snap.split("@")[1]
+			for snap in dst_fs.get_snapshots():
+				if snap.split("@")[1]==sync_mark:
+					if self.verbose:
+						print("Sucessfully transferred "+stop_snap)
+					return True
 
 	def rollback(self,snapshot):
 		rollback=self.pool.remote_cmd+" zfs rollback -r "+self.fs+"@"+snapshot
