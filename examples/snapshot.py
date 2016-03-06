@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 '''
+Created on 6 Sep 2012
+
 @author: Maximilian Mehnert <maximilian.mehnert@gmx.de>
 '''
 
@@ -20,7 +22,7 @@ if __name__ == '__main__':
 	parser.add_argument("--remote", help="e.g. \"ssh hostname\"", default="")
 
 	args=parser.parse_args()
-	print(args)
+#	print(args)
 
 	try:
 		pool=ZFS_pool(pool=args.fs.split("/")[0],remote_cmd=args.remote)
