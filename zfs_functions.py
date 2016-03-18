@@ -262,7 +262,7 @@ class ZFS_fs:
 		if self.verbose or self.dry_run:
 			print("Running sync: "+sync_command)
 		if not self.dry_run:
-			subprocess.check_call(sync_command,shell=True)
+			subprocess.call(sync_command,shell=True)
 
 			dst_fs.pool.update_zfs_snapshots()
 			sync_mark=stop_snap.split("@")[1]
@@ -271,6 +271,7 @@ class ZFS_fs:
 					if self.verbose:
 						print("Sucessfully transferred "+stop_snap)
 					return True
+			raise Exception ( "sync : "+sync_command+" failed")
 
 	def rollback(self,snapshot):
 		rollback=self.pool.remote_cmd+" zfs rollback -r "+self.fs+"@"+snapshot
