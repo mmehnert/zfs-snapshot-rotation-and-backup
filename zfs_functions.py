@@ -224,12 +224,19 @@ class ZFS_fs:
 				self.pool.remote_cmd+" zfs send -p -I "+first_src_snapshot+" "+last_src_snapshot+" | "+\
 					dst_fs.pool.remote_cmd+" zfs receive "+dst_fs.fs 
 			]
+
 			for command in commands:
 				if self.verbose or self.dry_run:
 					print("running "+command)
 				if not self.dry_run:
-					subprocess.check_call(command,shell=True)
-			return True
+					subprocess.call(command,shell=True)
+			dst_fs.pool.update_zfs_snapshots()
+			for snap in dst_fs.get_snapshots():
+				if last_src_snapshot in snap:
+					if self.verbose:
+						print("Sucessfully transferred "+last_src_snapshot)
+					return True
+			raise Exception ( "sync : "+str(commands)+" failed")
 
 
 	def sync_with(self,dst_fs=None,target_name=""):
