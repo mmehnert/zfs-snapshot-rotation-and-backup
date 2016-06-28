@@ -14,7 +14,6 @@ pp = pprint.PrettyPrinter(indent=4)
 class ZFS_iterator:
 	verbose=False
 	dry_run=False
-	pool=None
 	i = 0
 
 	def __init__(self,pool):
@@ -55,21 +54,19 @@ class ZFS_pool:
 	verbose=False
 	dry_run=False
 	destructive=False
-	remote_cmd=""
-	pool=""
-	zfs_filesystems=[]
-	zfs_snapshots=[]
 	def __str__(self):
 		return "pool["+self.remote_cmd+"]<"+self.pool+">"
 
 	def __init__(self,pool,remote_cmd="",verbose=False,dry_run=False,destructive=False):
 		self.pool=pool
 		self.remote_cmd=remote_cmd
-		self.update_zfs_filesystems()
-		self.update_zfs_snapshots()
 		self.verbose=verbose
 		self.dry_run=dry_run
 		self.destructive=destructive
+		self.zfs_filesystems=[]
+		self.zfs_snapshots=[]
+		self.update_zfs_filesystems()
+		self.update_zfs_snapshots()
 
 	def update_zfs_snapshots(self, timeout=180):
 		with TimeoutObject(timeout):
@@ -140,14 +137,24 @@ class ZFS_pool:
 			if fs.startswith(fs_filter):
 				yield fs
 
+	def delete_missing_fs_from_target(self,target=None, fs_filter="", target_prefix=""):
+		verbose_flag=""
+		if self.verbose:
+			verbose_flag="-v"
+		for fs in target.get_zfs_filesystems(fs_filter=target_prefix+fs_filter):
+			if fs[len(target_prefix):] not in self.zfs_filesystems:
+				command=target.remote_cmd+" zfs destroy -R "+verbose_flag+" "+fs
+				if self.verbose:
+					print("running: "+command)
+				if not self.dry_run:
+					subprocess.call(command,shell=True)
+
+
 	def scrub_running():
 		zfs_output=subprocess.check_output(self.remote_cmd+" zpool status "+pool.pool, shell=True)
 		return  "scrub in progress" in zfs_output
 
 class ZFS_fs:
-	fs=None
-	pool=None
-	destructive=False
 
 	def __str__(self):
 		return str(self.pool)+" fs:"+self.fs
@@ -162,6 +169,7 @@ class ZFS_fs:
 			self.pool=ZFS_pool(fs.split("/")[0],remote_cmd=remote_cmd)
 		else:
 			self.pool=pool
+		self.destructive=False
 
 	def get_snapshots(self):
 		return self.pool.get_zfs_snapshots(fs=self.fs, recursive=False)
