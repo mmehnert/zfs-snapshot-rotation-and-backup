@@ -68,17 +68,19 @@ class ZFS_pool:
 		self.update_zfs_filesystems()
 		self.update_zfs_snapshots()
 
+	def remote_exec(self, args):
+		return subprocess.check_output([self.remote_cmd] + args, universal_newlines=True)
+
 	def update_zfs_snapshots(self, timeout=180):
 		with TimeoutObject(timeout):
 			waitfor_cmd_to_exit(remote=self.remote_cmd, cmd_line_parts=["zfs","list","snapshot"], sleep=5)
-		snapshot_list=subprocess.check_output(self.remote_cmd+" zfs list -o name -t snapshot -H -r "+\
-			self.pool, shell=True,universal_newlines=True).split("\n")
+		snapshot_list = self.remote_exec(["zfs", "list", "-o", "name", "-t", "snapshot", "-H", "-r", self.pool]).split("\n")
 		self.zfs_snapshots=snapshot_list
 		return snapshot_list
 
 	def update_zfs_filesystems(self):
-		fs_list=subprocess.check_output(self.remote_cmd+' zfs list -o name -H -r '+self.pool,shell=True,universal_newlines=True).split("\n")
-		fs_list=fs_list[0:-1]
+		fs_list = self.remote_exec(["zfs", "list", "-o", "name", "-H", "-r", self.pool]).split("\n")
+		fs_list = fs_list[0:-1]
 		i=0
 		while i < len(fs_list):
 			origin=self.get_origin(fs_list[i])
@@ -107,9 +109,8 @@ class ZFS_pool:
 		return ZFS_iterator(self)
 
 	def get_origin(self,fs=None):
-		origin=subprocess.check_output(self.remote_cmd+' zfs get origin '+fs,shell=True,universal_newlines=True).split()
-		origin=origin[6:7][0]
-		return origin
+		origin = self.remote_exec(["zfs", "get", "origin", fs]).split()
+		return origin[6:7][0]
 
 	def get_zfs_filesystems(self, fs_filter=""):
 		for fs in self.zfs_filesystems:
@@ -151,7 +152,7 @@ class ZFS_pool:
 
 
 	def scrub_running():
-		zfs_output=subprocess.check_output(self.remote_cmd+" zpool status "+pool.pool, shell=True)
+		zfs_output = self.remote_exec(["zpool", "status", pool.pool])
 		return  "scrub in progress" in zfs_output
 
 class ZFS_fs:
